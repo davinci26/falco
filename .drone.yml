@@ -1,0 +1,86 @@
+kind: pipeline
+name: Build and Publish
+
+steps:
+  - name: lint
+    image: reviewdog/action-golangci-lint
+    commands:
+      - make lint
+    when:
+      event:
+        - push
+        - pull_request
+
+  - name: test
+    image: golang:1.16
+    commands:
+      - make test
+    when:
+      event:
+        - push
+        - pull_request
+
+  - name: dependency-check-snyk
+    image: artifactory.build.ue1.snooguts.net/dockerhub-remote/snyk/snyk:golang
+    commands:
+    - snyk test --project-name="reddit/fastlyctl" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
+    - snyk monitor --project-name="reddit/fastlyctl" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
+    environment:
+      SNYK_TOKEN:
+        from_secret: snyk_token
+
+  - name: publish-docker-image-to-artifactory
+    image: artifactory.build.ue1.snooguts.net/reddit-docker-prod/drone-plugin-docker
+    pull: if-not-exists
+    settings:
+      registry: artifactory.build.ue1.snooguts.net
+      repo: artifactory.build.ue1.snooguts.net/reddit-docker-prod/falco
+      username: drone
+      password:
+        from_secret: docker_password
+      tag:
+      - ${DRONE_TAG}
+    when:
+      event:
+      - tag
+    depends_on:
+      - test
+
+  - name: notify-slack
+    pull: if-not-exists
+    image: artifactory.build.ue1.snooguts.net/reddit-docker-prod/drone-plugin-slack
+    settings:
+      channel: transport-salon
+    environment:
+      SLACK_WEBHOOK:
+        from_secret: slack_webhook
+    when:
+      branch:
+      - main
+      event:
+      - push
+      status:
+      - failure
+      - success
+    depends_on:
+      - publish-docker-image-to-artifactory
+
+---
+kind: secret
+name: artifactory_password
+get:
+  path: secret/artifactory/drone/password
+
+---
+kind: secret
+name: docker_password
+
+get:
+  path: secret/artifactory/drone/password
+
+---
+kind: secret
+name: snyk_token
+
+get:
+  path: secret/snyk/drone-api-token

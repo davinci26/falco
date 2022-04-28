@@ -5,7 +5,7 @@ steps:
   - name: lint
     image: reviewdog/action-golangci-lint
     commands:
-      - make lint
+      - golangci-lint run
     when:
       event:
         - push
@@ -23,8 +23,8 @@ steps:
   - name: dependency-check-snyk
     image: artifactory.build.ue1.snooguts.net/dockerhub-remote/snyk/snyk:golang
     commands:
-    - snyk test --project-name="reddit/fastlyctl" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
-    - snyk monitor --project-name="reddit/fastlyctl" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
+    - snyk test --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
+    - snyk monitor --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
     environment:
       SNYK_TOKEN:
         from_secret: snyk_token

@@ -32,8 +32,8 @@ func New(r io.Reader, opts ...OptionFunc) *Lexer {
 	return l
 }
 
-func NewFromString(input string) *Lexer {
-	return New(strings.NewReader(input))
+func NewFromString(input string, opts ...OptionFunc) *Lexer {
+	return New(strings.NewReader(input), opts...)
 }
 
 func (l *Lexer) readChar() {
@@ -71,6 +71,10 @@ func (l *Lexer) GetLine(n int) (string, bool) {
 		return "", false
 	}
 	return l.stack[n-1], true
+}
+
+func (l *Lexer) LineCount() int {
+	return l.line - 1
 }
 
 func (l *Lexer) PeekToken() token.Token {

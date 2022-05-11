@@ -1,3 +1,38 @@
+## v0.10.0
+
+- Add support for Fastly Rate Limiting [#60](https://github.com/ysugimoto/falco/pull/60) (@shadialtarsha)
+- fix ci linting [#61](https://github.com/ysugimoto/falco/pull/61) (@ysugimoto)
+
+## v0.9.2
+
+- Support platform of `alipne`, `darwin-arm64` [#55](https://github.com/ysugimoto/falco/pull/55) (@ysugimoto)
+
+## v0.9.1
+
+- Tweak multiple service linting for terraform [#54](https://github.com/ysugimoto/falco/pull/54) (@ysugimoto)
+  - extend stdin timeout, `terraform show -json` command might be a few seconds to output them
+- Support legacy Fastly Provider service definition of `fastly_service_v1`
+- Fix ident parse for table property value
+  - If some declaration access in table property, it should be marked as used
+
+## v0.9.0
+
+- Improve waf related variables [#49](https://github.com/ysugimoto/falco/pull/49) (@ysugimoto)
+- Allow subroutine hoisting [#52](https://github.com/ysugimoto/falco/pull/52) (@ysugimoto)
+- Support linting multiple services [#53](https://github.com/ysugimoto/falco/pull/53) (@ysugimoto)
+
+## v0.8.0
+
+- Support terraform [#48](https://github.com/ysugimoto/falco/pull/48) (@ysugimoto)
+
+## v0.7.3
+
+- [bugfix] fix token point for missing semicolon [#44](https://github.com/ysugimoto/falco/pull/44) (@ysugimoto)
+
+## v0.7.2
+
+- [bugfix] Linting `client.geo.city.utf8` [#43](https://github.com/ysugimoto/falco/pull/43) (@davinci26)
+
 ## v0.7.1
 
 - [bugfix] improve type comparison in set/add statement [#40](https://github.com/ysugimoto/falco/pull/40) (@ysugimoto)

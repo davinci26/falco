@@ -11,10 +11,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.5
       - name: Run tests
         run: make test
       - name: Lint programs
         uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.42
+          skip-pkg-cache: true
+          skip-build-cache: true
+          skip-go-installation: true
       - name: Set version
         id: version
         run: |
@@ -29,5 +38,6 @@ jobs:
           files: |
             dist/falco-linux-amd64
             dist/falco-darwin-amd64
+            dist/falco-darwin-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -40,10 +40,25 @@ type RunnerResult struct {
 	Vcls     []*plugin.VCL
 }
 
+type StatsResult struct {
+	Main        string `json:"main"`
+	Subroutines int    `json:"subroutines"`
+	Tables      int    `json:"tables"`
+	Backends    int    `json:"backends"`
+	Acls        int    `json:"acls"`
+	Directors   int    `json:"directors"`
+	Files       int    `json:"files"`
+	Lines       int    `json:"lines"`
+}
+
+type RunMode struct {
+	isMain bool
+	isStat bool
+}
+
 type Runner struct {
 	transformers []*Transformer
-	includePaths []string
-	mainVclFile  string
+	resolver     Resolver
 	overrides    map[string]linter.Severity
 	lexers       map[string]*lexer.Lexer
 
@@ -58,13 +73,13 @@ type Runner struct {
 	errors   int
 }
 
-func NewRunner(mainVcl string, c *Config) (*Runner, error) {
+func NewRunner(rz Resolver, c *Config) (*Runner, error) {
 	r := &Runner{
-		mainVclFile: mainVcl,
-		context:     context.New(),
-		level:       LevelError,
-		overrides:   make(map[string]linter.Severity),
-		lexers:      make(map[string]*lexer.Lexer),
+		resolver:  rz,
+		context:   context.New(),
+		level:     LevelError,
+		overrides: make(map[string]linter.Severity),
+		lexers:    make(map[string]*lexer.Lexer),
 	}
 
 	if c.Remote {
@@ -92,17 +107,6 @@ func NewRunner(mainVcl string, c *Config) (*Runner, error) {
 				writeln(red, err.Error())
 			}
 		}()
-	}
-
-	// Directory which placed main VCL adds to include path
-	r.includePaths = append(r.includePaths, filepath.Dir(mainVcl))
-
-	// Add include paths as absolute
-	for i := range c.IncludePaths {
-		abs, err := filepath.Abs(c.IncludePaths[i])
-		if err == nil {
-			r.includePaths = append(r.includePaths, abs)
-		}
 	}
 
 	// Check transformer exists and format to absolute path
@@ -194,7 +198,14 @@ func (r *Runner) Transform(vcls []*plugin.VCL) error {
 }
 
 func (r *Runner) Run() (*RunnerResult, error) {
-	vcls, err := r.run(r.mainVclFile, true)
+	main, err := r.resolver.MainVCL()
+	if err != nil {
+		return nil, err
+	}
+	vcls, err := r.run(main, &RunMode{
+		isMain: true,
+		isStat: false,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -207,14 +218,8 @@ func (r *Runner) Run() (*RunnerResult, error) {
 	}, nil
 }
 
-func (r *Runner) run(vclFile string, isMain bool) ([]*plugin.VCL, error) {
-	fp, err := os.Open(vclFile)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to open file: %s", vclFile)
-	}
-	defer fp.Close()
-
-	lx := lexer.New(fp, lexer.WithFile(vclFile))
+func (r *Runner) run(v *VCL, mode *RunMode) ([]*plugin.VCL, error) {
+	lx := lexer.NewFromString(v.Data, lexer.WithFile(v.Name))
 	p := parser.New(lx)
 	vcl, err := p.ParseVCL()
 	if err != nil {
@@ -226,7 +231,7 @@ func (r *Runner) run(vclFile string, isMain bool) ([]*plugin.VCL, error) {
 		return nil, ErrParser
 	}
 	lx.NewLine()
-	r.lexers[vclFile] = lx
+	r.lexers[v.Name] = lx
 
 	var vcls []*plugin.VCL
 	// Lint dependent VCLs before execute main VCL
@@ -236,30 +241,32 @@ func (r *Runner) run(vclFile string, isMain bool) ([]*plugin.VCL, error) {
 			continue
 		}
 
-		var file string
-		// Find for each include paths
-		for _, p := range r.includePaths {
-			if _, err := os.Stat(filepath.Join(p, include.Module.Value+".vcl")); err == nil {
-				file = filepath.Join(p, include.Module.Value+".vcl")
-				break
+		if module, err := r.resolver.Resolve(include.Module.Value); err == nil {
+			subVcl, err := r.run(module, &RunMode{
+				isMain: false,
+				isStat: mode.isStat,
+			})
+			if err != nil {
+				return nil, err
 			}
+			vcls = append(vcls, subVcl...)
 		}
-
-		subVcl, err := r.run(file, false)
-		if err != nil {
-			return nil, err
-		}
-		vcls = append(vcls, subVcl...)
 	}
 
 	// Append main to the last of proceeds VCLs
 	vcls = append(vcls, &plugin.VCL{
-		File: vclFile,
+		File: v.Name,
 		AST:  vcl,
 	})
 
 	lt := linter.New()
-	lt.Lint(vcl, r.context, isMain)
+	lt.Lint(vcl, r.context, mode.isMain)
+
+	// If runner is running as stat mode, prevent to output lint result
+	if mode.isStat {
+		return vcls, nil
+	}
+
 	if len(lt.Errors) > 0 {
 		for _, err := range lt.Errors {
 			le, ok := err.(*linter.LintError)
@@ -364,4 +371,34 @@ func (r *Runner) printLinterError(lx *lexer.Lexer, err *linter.LintError) {
 		writeln(white, "See document in detail: %s", err.Reference)
 	}
 	writeln(white, "")
+}
+
+func (r *Runner) Stats() (*StatsResult, error) {
+	main, err := r.resolver.MainVCL()
+	if err != nil {
+		return nil, err
+	}
+	vcls, err := r.run(main, &RunMode{
+		isMain: true,
+		isStat: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &StatsResult{
+		Main:        main.Name,
+		Subroutines: len(r.context.Subroutines),
+		Tables:      len(r.context.Tables),
+		Backends:    len(r.context.Backends),
+		Acls:        len(r.context.Acls),
+		Directors:   len(r.context.Directors),
+	}
+
+	for _, vcl := range vcls {
+		stats.Files++
+		stats.Lines += r.lexers[vcl.File].LineCount()
+	}
+
+	return stats, nil
 }

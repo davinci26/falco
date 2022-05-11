@@ -115,23 +115,31 @@ func (l *Linter) lint(node ast.Node, ctx *context.Context) types.Type {
 	// Root program
 	case *ast.VCL:
 		return l.lintVCL(t, ctx)
-	// Statements
+
+	// Declarations
+	// Note: root declaration has already added in linter context.
 	case *ast.AclDeclaration:
-		return l.lintAclDeclaration(t, ctx)
+		return l.lintAclDeclaration(t)
 	case *ast.BackendDeclaration:
 		return l.lintBackendDeclaration(t, ctx)
-	case *ast.ImportStatement:
-		return l.lintImportStatement(t, ctx)
-	case *ast.IncludeStatement:
-		return l.lintIncludeStatement(t, ctx)
 	case *ast.DirectorDeclaration:
 		return l.lintDirectorDeclaration(t, ctx)
 	case *ast.TableDeclaration:
 		return l.lintTableDeclaration(t, ctx)
 	case *ast.SubroutineDeclaration:
 		return l.lintSubRoutineDeclaration(t, ctx)
+	case *ast.PenaltyboxDeclaration:
+		return l.lintPenaltyboxDeclaration(t)
+	case *ast.RatecounterDeclaration:
+		return l.lintRatecounterDeclaration(t)
+
+	// Statements
 	case *ast.BlockStatement:
 		return l.lintBlockStatement(t, ctx)
+	case *ast.ImportStatement:
+		return l.lintImportStatement(t, ctx)
+	case *ast.IncludeStatement:
+		return l.lintIncludeStatement(t, ctx)
 	case *ast.DeclareStatement:
 		return l.lintDeclareStatement(t, ctx)
 	case *ast.SetStatement:
@@ -187,23 +195,131 @@ func (l *Linter) lint(node ast.Node, ctx *context.Context) types.Type {
 	case *ast.FunctionCallExpression:
 		return l.lintFunctionCallExpression(t, ctx)
 	default:
-		l.Error(fmt.Errorf("Unexpected node: %s", node.String()))
+		l.Error(fmt.Errorf("unexpected node: %s", node.String()))
 	}
 	return types.NeverType
 }
 
 func (l *Linter) lintVCL(vcl *ast.VCL, ctx *context.Context) types.Type {
-	for _, stmt := range vcl.Statements {
-		l.lint(stmt, ctx)
+	// https://github.com/ysugimoto/falco/issues/50
+	// To support subroutine hoisting, add root statements to context firstly and lint each statements after that.
+	statements := l.factoryRootStatements(vcl, ctx)
+
+	// Lint each statement/declaration logics
+	for _, s := range statements {
+		l.lint(s, ctx)
 	}
+
 	return types.NeverType
 }
 
-func (l *Linter) lintAclDeclaration(decl *ast.AclDeclaration, ctx *context.Context) types.Type {
-	acl := &types.Acl{
-		Decl: decl,
-	}
+//nolint:gocognit
+func (l *Linter) factoryRootStatements(vcl *ast.VCL, ctx *context.Context) []ast.Statement {
+	var statements []ast.Statement
+	for _, stmt := range vcl.Statements {
+		switch t := stmt.(type) {
+		case *ast.AclDeclaration:
+			if err := ctx.AddAcl(t.Name.Value, &types.Acl{Decl: t}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(ACL_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.BackendDeclaration:
+			if err := ctx.AddBackend(t.Name.Value, &types.Backend{BackendDecl: t}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(BACKEND_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.ImportStatement:
+			continue
+		case *ast.IncludeStatement:
+			continue
+		case *ast.DirectorDeclaration:
+			if err := ctx.AddDirector(t.Name.Value, &types.Director{Decl: t}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(DIRECTOR_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.TableDeclaration:
+			table := &types.Table{
+				Decl:       t,
+				Name:       t.Name.Value,
+				Properties: t.Properties,
+			}
 
+			// Define table value type
+			if t.ValueType == nil {
+				table.ValueType = types.StringType // default as STRING (e.g. Edge Dictionary)
+			} else {
+				v, ok := ValueTypeMap[t.ValueType.Value]
+				if !ok {
+					l.Error(UndefinedTableType(
+						t.ValueType.GetMeta(), t.Name.Value, t.ValueType.Value,
+					).Match(TABLE_TYPE_VARIATION))
+				} else {
+					table.ValueType = v
+				}
+			}
+
+			if err := ctx.AddTable(t.Name.Value, table); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(TABLE_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.SubroutineDeclaration:
+			if err := ctx.AddSubroutine(t.Name.Value, &types.Subroutine{Decl: t, Body: t.Block}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(SUBROUTINE_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.PenaltyboxDeclaration:
+			if err := ctx.AddPenaltybox(t.Name.Value, &types.Penaltybox{Penaltybox: t}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(PENALTYBOX_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		case *ast.RatecounterDeclaration:
+			if err := ctx.AddRatecounter(t.Name.Value, &types.Ratecounter{Ratecounter: t}); err != nil {
+				e := &LintError{
+					Severity: ERROR,
+					Token:    t.Name.GetMeta().Token,
+					Message:  err.Error(),
+				}
+				l.Error(e.Match(SUBROUTINE_DUPLICATED))
+			}
+			statements = append(statements, stmt)
+		default:
+			l.Error(fmt.Errorf("unexpected statement declaration found: %s", t.String()))
+		}
+	}
+	return statements
+}
+
+func (l *Linter) lintAclDeclaration(decl *ast.AclDeclaration) types.Type {
 	// validate ACL name
 	if !isValidName(decl.Name.Value) {
 		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "acl").Match(ACL_SYNTAX))
@@ -228,23 +344,10 @@ func (l *Linter) lintAclDeclaration(decl *ast.AclDeclaration, ctx *context.Conte
 		}
 	}
 
-	if err := ctx.AddAcl(decl.Name.Value, acl); err != nil {
-		e := &LintError{
-			Severity: ERROR,
-			Token:    decl.Name.GetMeta().Token,
-			Message:  err.Error(),
-		}
-		l.Error(e.Match(ACL_DUPLICATED))
-	}
-
 	return types.NeverType
 }
 
 func (l *Linter) lintBackendDeclaration(decl *ast.BackendDeclaration, ctx *context.Context) types.Type {
-	backend := &types.Backend{
-		BackendDecl: decl,
-	}
-
 	// lint BACKEND name
 	if !isValidName(decl.Name.Value) {
 		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "backend").Match(BACKEND_SYNTAX))
@@ -253,15 +356,6 @@ func (l *Linter) lintBackendDeclaration(decl *ast.BackendDeclaration, ctx *conte
 	// lint property definitions
 	for i := range decl.Properties {
 		l.lintBackendProperty(decl.Properties[i], ctx)
-	}
-
-	if err := ctx.AddBackend(decl.Name.Value, backend); err != nil {
-		e := &LintError{
-			Severity: ERROR,
-			Token:    decl.Name.GetMeta().Token,
-			Message:  err.Error(),
-		}
-		l.Error(e.Match(BACKEND_DUPLICATED))
 	}
 
 	return types.NeverType
@@ -317,10 +411,6 @@ func (l *Linter) lintIncludeStatement(stmt *ast.IncludeStatement, ctx *context.C
 }
 
 func (l *Linter) lintDirectorDeclaration(decl *ast.DirectorDeclaration, ctx *context.Context) types.Type {
-	director := &types.Director{
-		Decl: decl,
-	}
-
 	// validate director name
 	if !isValidName(decl.Name.Value) {
 		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "director").Match(DIRECTOR_SYNTAX))
@@ -328,14 +418,6 @@ func (l *Linter) lintDirectorDeclaration(decl *ast.DirectorDeclaration, ctx *con
 
 	l.lintDirectorProperty(decl, ctx)
 
-	if err := ctx.AddDirector(decl.Name.Value, director); err != nil {
-		e := &LintError{
-			Severity: ERROR,
-			Token:    decl.Name.GetMeta().Token,
-			Message:  err.Error(),
-		}
-		l.Error(e.Match(DIRECTOR_DUPLICATED))
-	}
 	return types.NeverType
 }
 
@@ -435,29 +517,9 @@ func (l *Linter) lintDirectorProperty(decl *ast.DirectorDeclaration, ctx *contex
 }
 
 func (l *Linter) lintTableDeclaration(decl *ast.TableDeclaration, ctx *context.Context) types.Type {
-	table := &types.Table{
-		Decl:       decl,
-		Name:       decl.Name.Value,
-		Properties: decl.Properties,
-	}
-
 	// validate table name
 	if !isValidName(decl.Name.Value) {
 		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "table").Match(TABLE_SYNTAX))
-	}
-
-	// validate table type specification
-	if decl.ValueType == nil {
-		table.ValueType = types.StringType
-	} else {
-		v, ok := ValueTypeMap[decl.ValueType.Value]
-		if !ok {
-			l.Error(UndefinedTableType(
-				decl.ValueType.GetMeta(), decl.Name.Value, decl.ValueType.Value,
-			).Match(TABLE_TYPE_VARIATION))
-		} else {
-			table.ValueType = v
-		}
 	}
 
 	// Table item is limited under 1000 by default
@@ -467,23 +529,22 @@ func (l *Linter) lintTableDeclaration(decl *ast.TableDeclaration, ctx *context.C
 		err := &LintError{
 			Severity: WARNING,
 			Token:    decl.Name.GetMeta().Token,
-			Message:  fmt.Sprintf(`table "%s" items are limited under 1000`, table.Name),
+			Message:  fmt.Sprintf(`table "%s" items are limited under 1000`, decl.Name.Value),
 		}
 		l.Error(err.Match(TABLE_ITEM_LIMITATION))
 	}
 
-	// validate table property
-	for _, p := range decl.Properties {
-		l.lintTableProperty(p, table.ValueType, ctx)
+	// table value type
+	var valueType types.Type
+	if decl.ValueType == nil {
+		valueType = types.StringType
+	} else if v, ok := ValueTypeMap[decl.ValueType.Value]; ok {
+		valueType = v
 	}
 
-	if err := ctx.AddTable(decl.Name.Value, table); err != nil {
-		err := &LintError{
-			Severity: ERROR,
-			Token:    decl.Name.GetMeta().Token,
-			Message:  err.Error(),
-		}
-		l.Error(err.Match(TABLE_DUPLICATED))
+	// validate table property
+	for _, p := range decl.Properties {
+		l.lintTableProperty(p, valueType, ctx)
 	}
 
 	return types.NeverType
@@ -497,8 +558,10 @@ func (l *Linter) lintTableProperty(prop *ast.TableProperty, tableType types.Type
 			l.Error(InvalidTypeConversion(prop.Value.GetMeta(), "ID").Match(TABLE_SYNTAX))
 			return
 		}
-		if _, ok := ctx.Acls[ident.Value]; !ok {
+		if a, ok := ctx.Acls[ident.Value]; !ok {
 			l.Error(UndefinedAcl(ident.GetMeta(), ident.Value))
+		} else {
+			a.IsUsed = true
 		}
 	case types.BackendType:
 		ident, ok := prop.Value.(*ast.Ident)
@@ -506,8 +569,10 @@ func (l *Linter) lintTableProperty(prop *ast.TableProperty, tableType types.Type
 			l.Error(InvalidTypeConversion(prop.Value.GetMeta(), "ID").Match(TABLE_SYNTAX))
 			return
 		}
-		if _, ok := ctx.Backends[ident.Value]; !ok {
+		if b, ok := ctx.Backends[ident.Value]; !ok {
 			l.Error(UndefinedBackend(ident.GetMeta(), ident.Value))
+		} else {
+			b.IsUsed = true
 		}
 	default:
 		vt := l.lint(prop.Value, ctx)
@@ -518,23 +583,9 @@ func (l *Linter) lintTableProperty(prop *ast.TableProperty, tableType types.Type
 }
 
 func (l *Linter) lintSubRoutineDeclaration(decl *ast.SubroutineDeclaration, ctx *context.Context) types.Type {
-	subroutine := &types.Subroutine{
-		Decl: decl,
-		Body: decl.Block,
-	}
-
 	// validate subroutine name
 	if !isValidName(decl.Name.Value) {
 		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "sub").Match(SUBROUTINE_SYNTAX))
-	}
-
-	if err := ctx.AddSubroutine(decl.Name.Value, subroutine); err != nil {
-		err := &LintError{
-			Severity: ERROR,
-			Token:    decl.Name.GetMeta().Token,
-			Message:  err.Error(),
-		}
-		l.Error(err.Match(SUBROUTINE_DUPLICATED))
 	}
 
 	cc := ctx.Scope(getSubroutineCallScope(decl))
@@ -550,6 +601,32 @@ func (l *Linter) lintSubRoutineDeclaration(decl *ast.SubroutineDeclaration, ctx 
 	// validate fastly specific boilerplate macro is embedded like "FASTLY recv"
 	if scope := getFastlySubroutineScope(decl.Name.Value); scope != "" {
 		l.lintFastlyBoilerPlateMacro(decl, strings.ToUpper("FASTLY "+scope))
+	}
+
+	return types.NeverType
+}
+
+func (l *Linter) lintPenaltyboxDeclaration(decl *ast.PenaltyboxDeclaration) types.Type {
+	// validate penaltybox name
+	if !isValidName(decl.Name.Value) {
+		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "penaltybox").Match(PENALTYBOX_SYNTAX))
+	}
+
+	if len(decl.Block.Statements) > 0 {
+		l.Error(NonEmptyPenaltyboxBlock(decl.GetMeta(), decl.Name.Value).Match(PENALTYBOX_NONEMPTY_BLOCK))
+	}
+
+	return types.NeverType
+}
+
+func (l *Linter) lintRatecounterDeclaration(decl *ast.RatecounterDeclaration) types.Type {
+	// validate ratecounter name
+	if !isValidName(decl.Name.Value) {
+		l.Error(InvalidName(decl.Name.GetMeta(), decl.Name.Value, "ratecounter").Match(RATECOUNTER_SYNTAX))
+	}
+
+	if len(decl.Block.Statements) > 0 {
+		l.Error(NonEmptyRatecounterBlock(decl.GetMeta(), decl.Name.Value).Match(RATECOUNTER_NONEMPTY_BLOCK))
 	}
 
 	return types.NeverType
@@ -657,7 +734,7 @@ func (l *Linter) lintSetStatement(stmt *ast.SetStatement, ctx *context.Context) 
 	case "+=", "-=":
 		l.lintAddSubOperator(stmt.Operator, left, right, isLiteralExpression(stmt.Value))
 	case "*=", "/=", "%=":
-		l.lintArithmeticOpereator(stmt.Operator, left, right, isLiteralExpression(stmt.Value))
+		l.lintArithmeticOperator(stmt.Operator, left, right, isLiteralExpression(stmt.Value))
 	case "|=", "&=", "^=", "<<=", ">>=", "rol=", "ror=":
 		l.lintBitwiseOperator(stmt.Operator, left, right)
 	case "||=", "&&=":
@@ -952,21 +1029,20 @@ func (l *Linter) lintSyntheticStatement(stmt *ast.SyntheticStatement, ctx *conte
 func (l *Linter) lintIdent(exp *ast.Ident, ctx *context.Context) types.Type {
 	v, err := ctx.Get(exp.Value)
 	if err != nil {
-		if _, ok := ctx.Identifiers[exp.Value]; ok {
-			return types.IDType
+		if b, ok := ctx.Backends[exp.Value]; ok {
+			// mark backend is used
+			b.IsUsed = true
+			return types.BackendType
 		} else if a, ok := ctx.Acls[exp.Value]; ok {
 			// mark acl is used
 			a.IsUsed = true
 			return types.AclType
-		} else if b, ok := ctx.Backends[exp.Value]; ok {
-			// mark backend is used
-			b.IsUsed = true
-
-			return types.BackendType
 		} else if t, ok := ctx.Tables[exp.Value]; ok {
 			// mark table is used
 			t.IsUsed = true
 			return types.TableType
+		} else if _, ok := ctx.Identifiers[exp.Value]; ok {
+			return types.IDType
 		}
 		l.Error(UndefinedVariable(exp.GetMeta(), exp.Value))
 	}
@@ -1217,7 +1293,7 @@ func (l *Linter) lintFunctionCallExpression(exp *ast.FunctionCallExpression, ctx
 					exp.Function.String(), len(exp.Arguments),
 				),
 			}
-			l.Error(err.Match(FUNCTION_ARGUMENS).Ref(fn.Reference))
+			l.Error(err.Match(FUNCTION_ARGUMENTS).Ref(fn.Reference))
 		}
 		return fn.Return
 	}
@@ -1233,7 +1309,7 @@ func (l *Linter) lintFunctionCallExpression(exp *ast.FunctionCallExpression, ctx
 		l.Error(FunctionArgumentMismatch(
 			exp.Function.GetMeta(), exp.Function.String(),
 			len(fn.Arguments), len(exp.Arguments),
-		).Match(FUNCTION_ARGUMENS).Ref(fn.Reference))
+		).Match(FUNCTION_ARGUMENTS).Ref(fn.Reference))
 	}
 
 	for i, v := range argTypes {

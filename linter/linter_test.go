@@ -335,7 +335,6 @@ sub vcl_recv {
 }`
 		assertError(t, input)
 	})
-
 }
 
 func TestLintDeclareStatement(t *testing.T) {
@@ -343,7 +342,7 @@ func TestLintDeclareStatement(t *testing.T) {
 		input := `
 acl foo {}
 backend bar {}
-sub bax {
+sub baz {
 	declare local var.item1 STRING;
 	declare local var.item2 INTEGER;
 	declare local var.item3 FLOAT;
@@ -355,7 +354,7 @@ sub bax {
 	set var.item1 = "1";
 	set var.item2 = 1;
 	set var.item3 = 1.0;
-	set var.item4 = std.ip("192.168.0.1", "192.168.2");
+	set var.item4 = std.ip("192.168.0.1", "192.168.0.2");
 	set var.item5 = always;
 	set var.item6 = foo;
 	set var.item7 = bar;
@@ -403,6 +402,15 @@ sub foo {
 		assertNoError(t, input)
 	})
 
+	t.Run("pass with deep fastly variable", func(t *testing.T) {
+		input := `
+sub foo {
+	set req.http.Host = client.geo.city.utf8;
+}`
+
+		assertNoError(t, input)
+	})
+
 	t.Run("invalid variable name", func(t *testing.T) {
 		input := `
 sub foo {
@@ -429,7 +437,6 @@ sub foo {
 
 		assertError(t, input)
 	})
-
 }
 
 func TestLintUnsetStatement(t *testing.T) {
@@ -468,7 +475,6 @@ sub foo {
 
 		assertError(t, input)
 	})
-
 }
 
 func TestLintAddStatement(t *testing.T) {
@@ -581,7 +587,6 @@ sub foo {
 `
 		assertError(t, input)
 	})
-
 }
 
 func TestLintIfStatement(t *testing.T) {
@@ -1479,5 +1484,106 @@ sub vcl_fetch {
 }
 `
 		assertNoError(t, input)
+	})
+}
+
+func TestSubroutineHoisting(t *testing.T) {
+	t.Run("pass", func(t *testing.T) {
+		input := `
+sub vcl_recv {
+	### FASTLY recv
+	call hoisted_subroutine;
+	return(lookup);
+}
+
+sub hoisted_subroutine {
+	set req.http.X-Subrountine-Hoisted = "yes";
+}
+`
+		assertNoError(t, input)
+	})
+}
+
+func TestLintPenaltyboxStatement(t *testing.T) {
+	t.Run("pass", func(t *testing.T) {
+		input := `
+penaltybox ip_pb {}
+`
+		assertNoError(t, input)
+	})
+
+	t.Run("pass with comments", func(t *testing.T) {
+		input := `
+penaltybox ip_pb {
+	// This is a comment
+}
+`
+		assertNoError(t, input)
+	})
+
+	t.Run("invalid penaltybox name", func(t *testing.T) {
+		input := `
+penaltybox vcl-recv {}
+	`
+		assertError(t, input)
+	})
+
+	t.Run("duplicate penaltybox declared", func(t *testing.T) {
+		input := `
+penaltybox ip_pb {}
+penaltybox ip_pb {}
+	`
+		assertError(t, input)
+	})
+
+	t.Run("penaltybox block is not empty", func(t *testing.T) {
+		input := `
+penaltybox ip_pb {
+	set var.bar = "baz";
+}
+`
+		assertError(t, input)
+	})
+}
+
+func TestLintRatecounterStatement(t *testing.T) {
+	t.Run("pass", func(t *testing.T) {
+		input := `
+ratecounter req_counter {}
+`
+		assertNoError(t, input)
+	})
+
+	t.Run("pass with comments", func(t *testing.T) {
+		input := `
+ratecounter req_counter {
+	// This is a comment
+}
+`
+		assertNoError(t, input)
+	})
+
+	t.Run("invalid ratecounter name", func(t *testing.T) {
+		input := `
+ratecounter vcl-recv {}
+	`
+		assertError(t, input)
+	})
+
+	t.Run("duplicate ratecounter declared", func(t *testing.T) {
+		input := `
+ratecounter req_counter {}
+ratecounter req_counter {}
+	`
+		assertError(t, input)
+	})
+
+	t.Run("ratecounter block is not empty", func(t *testing.T) {
+		input := `
+ratecounter req_counter {
+	set var.bar = "baz";
+}
+`
+		assertError(t, input)
 	})
 }

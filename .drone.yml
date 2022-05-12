@@ -15,7 +15,7 @@ steps:
   - name: test
     image: golang:1.16
     commands:
-      - apt-get install libpcre++-dev
+      - apt-get install libpcre++
       - make test
     when:
       event:

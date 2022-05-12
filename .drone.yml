@@ -15,6 +15,7 @@ steps:
   - name: test
     image: golang:1.16
     commands:
+      - 
       - make test
     when:
       event:
@@ -24,7 +25,7 @@ steps:
   - name: dependency-check-snyk
     image: artifactory.build.ue1.snooguts.net/dockerhub-remote/snyk/snyk:golang
     commands:
-    - apt-get -y install libpcre++-dev
+    - apt-get update && apt-get install libpcre++0
     - snyk test --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
     - snyk monitor --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
     environment:

@@ -5,6 +5,7 @@ steps:
   - name: lint
     image: reviewdog/action-golangci-lint
     commands:
+      - apt-get -y install libpcre++-dev
       - golangci-lint run
     when:
       event:
@@ -23,6 +24,7 @@ steps:
   - name: dependency-check-snyk
     image: artifactory.build.ue1.snooguts.net/dockerhub-remote/snyk/snyk:golang
     commands:
+    - apt-get -y install libpcre++-dev
     - snyk test --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
     - snyk monitor --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
     environment:

@@ -25,7 +25,7 @@ steps:
   - name: dependency-check-snyk
     image: artifactory.build.ue1.snooguts.net/dockerhub-remote/snyk/snyk:golang
     commands:
-    - apt-get install libpcre++-dev
+    - apt-get install libpcre3
     - snyk test --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" --fail-on=upgradable
     - snyk monitor --project-name="reddit/falco" --org="15fc3399-7643-4dd7-8046-b23718ff4254" -q
     environment:

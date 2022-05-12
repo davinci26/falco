@@ -5,7 +5,6 @@ steps:
   - name: lint
     image: reviewdog/action-golangci-lint
     commands:
-      - apt-get -y install libpcre++-dev
       - golangci-lint run
     when:
       event:

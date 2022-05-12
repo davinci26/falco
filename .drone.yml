@@ -3,8 +3,9 @@ name: Build and Publish
 
 steps:
   - name: lint
-    image: reviewdog/action-golangci-lint
+    image: golangci/golangci-lint
     commands:
+      - apt-get update && apt-get -y install libpcre++-dev
       - golangci-lint run
     when:
       event:

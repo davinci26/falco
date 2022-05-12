@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY ./ ./
 
-RUN VERSION=$(git rev-parse HEAD) && GOOS=linux GOARCH=amd64 go build \
+RUN VERSION=$(git rev-parse HEAD) && apt-get update && apt-get -y install libpcre++-dev && go build \
 		 -ldflags "-X main.version=$VERSION" \
 		 -o /build/falco ./cmd/falco
 

@@ -1,1 +1,0 @@
-{"buildTargets":["clean","darwin_amd64","darwin_arm64","generate","lint","linux","local","test"],"launchTargets":[],"customConfigurationProvider":{"workspaceBrowse":{"browsePath":[],"compilerArgs":[]},"fileIndex":[]}}

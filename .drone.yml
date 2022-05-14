@@ -42,30 +42,32 @@ steps:
         from_secret: docker_password
       tag:
         - ${DRONE_TAG}
-    # when:
-    #   event:
-    #     - tag
+    when:
+      branch:
+        - main
+      event:
+        - tag
     depends_on:
       - test
 
-  # - name: notify-slack
-  #   pull: if-not-exists
-  #   image: artifactory.build.ue1.snooguts.net/reddit-docker-prod/drone-plugin-slack
-  #   settings:
-  #     channel: transport-salon
-  #   environment:
-  #     SLACK_WEBHOOK:
-  #       from_secret: slack_webhook
-  #   when:
-  #     branch:
-  #     - main
-  #     event:
-  #     - push
-  #     status:
-  #     - failure
-  #     - success
-  #   depends_on:
-  #     - publish-docker-image-to-artifactory
+  - name: notify-slack
+    pull: if-not-exists
+    image: artifactory.build.ue1.snooguts.net/reddit-docker-prod/drone-plugin-slack
+    settings:
+      channel: transport-salon
+    environment:
+      SLACK_WEBHOOK:
+        from_secret: slack_webhook
+    when:
+      branch:
+        - main
+      event:
+        - push
+      status:
+        - failure
+        - success
+    depends_on:
+      - publish-docker-image-to-artifactory
 
 ---
 kind: secret

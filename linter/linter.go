@@ -1375,7 +1375,7 @@ func (l *Linter) lintFunctionCallExpression(exp *ast.FunctionCallExpression, ctx
 
 func (l *Linter) lintFunctionStatement(exp *ast.FunctionCallStatement, ctx *context.Context) types.Type {
 	return l.lintFunctionArguments(functionMeta{
-		name:      exp.Function.String(),
+		name:      exp.Function.Value,
 		token:     exp.Function.GetMeta().Token,
 		arguments: exp.Arguments,
 		meta:      exp.Meta,

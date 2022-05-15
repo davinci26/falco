@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/ysugimoto/falco/ast"
 	"github.com/ysugimoto/falco/token"
@@ -586,6 +584,5 @@ func (p *Parser) parseFunctionCall() (*ast.FunctionCallStatement, error) {
 
 	p.nextToken() // point to SEMICOLON
 
-	fmt.Println(stmt.Function)
 	return stmt, nil
 }

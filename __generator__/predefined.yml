@@ -866,6 +866,11 @@ tls.client.tlsexts_sha:
   on: [RECV, HASH, DELIVER, LOG]
   get: STRING
 
+tls.client.ja3_md5:
+  reference: "https://developer.fastly.com/reference/vcl/variables/client-connection/tls-client-ja3-md5/"
+  on: [RECV, HASH, DELIVER, LOG]
+  get: STRING
+
 client.bot.name:
   reference: "https://developer.fastly.com/reference/vcl/variables/client-request/client-bot-name/"
   on: [RECV, HASH, HIT, MISS, PASS, FETCH, ERROR, DELIVER, LOG]

@@ -3935,6 +3935,16 @@ func predefinedVariables() Variables {
 								Reference: "https://developer.fastly.com/reference/vcl/variables/client-connection/tls-client-iana-chosen-cipher-id/",
 							},
 						},
+						"ja3_md5": &Object{
+							Items: map[string]*Object{},
+							Value: &Accessor{
+								Get:       types.StringType,
+								Set:       types.NeverType,
+								Unset:     false,
+								Scopes:    RECV | HASH | DELIVER | LOG,
+								Reference: "https://developer.fastly.com/reference/vcl/variables/client-connection/tls-client-ja3-md5/",
+							},
+						},
 						"protocol": &Object{
 							Items: map[string]*Object{},
 							Value: &Accessor{

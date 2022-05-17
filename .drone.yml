@@ -45,6 +45,7 @@ steps:
     when:
       branch:
         - main
+        - demoBinary
       event:
         - tag
     depends_on:
@@ -61,6 +62,7 @@ steps:
     when:
       branch:
         - main
+        - demoBinary
       event:
         - push
       status:

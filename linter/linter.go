@@ -47,12 +47,9 @@ func (l *Linter) Lint(node ast.Node, ctx *context.Context, isMain bool) types.Ty
 		l.lintUnusedAcls(ctx)
 		l.lintUnusedBackends(ctx)
 		l.lintUnusedSubroutines(ctx)
-<<<<<<< HEAD
 		l.lintUnusedPenaltyboxes(ctx)
 		l.lintUnusedRatecounters(ctx)
-=======
 		l.lintUnusedGotos(ctx)
->>>>>>> origin/gotoDeclaration
 	}
 
 	return types.NeverType
@@ -1208,7 +1205,6 @@ func (l *Linter) lintIdent(exp *ast.Ident, ctx *context.Context) types.Type {
 			// mark table is used
 			t.IsUsed = true
 			return types.TableType
-<<<<<<< HEAD
 		} else if p, ok := ctx.Penaltyboxes[exp.Value]; ok {
 			// mark penaltybox is used
 			p.IsUsed = true

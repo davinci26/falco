@@ -141,6 +141,7 @@ func (l *Linter) lintUnusedGotos(ctx *context.Context) {
 	}
 }
 
+// nolint: funlen, gocyclo
 func (l *Linter) lint(node ast.Node, ctx *context.Context) types.Type {
 	switch t := node.(type) {
 	// Root program
